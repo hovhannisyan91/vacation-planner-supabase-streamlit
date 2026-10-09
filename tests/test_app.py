@@ -93,6 +93,23 @@ class AppTests(unittest.TestCase):
         reactivated = next(row for row in self.repo.snapshot()["employees"] if row["employee_id"] == "E2")
         self.assertEqual(reactivated["active"], "true")
 
+    def test_permanent_delete_requires_typed_confirmation_and_erases_ranges(self):
+        self.repo.save("ranges", dict(range_id="R1", employee_id="E1", kind="Available",
+                                       start_date="2026-10-12", end_date="2026-10-14", note=""))
+        self.at.run()
+        self.page("Employees & teams")
+        next(s for s in self.at.selectbox if s.label == "Employee to update").set_value("E1").run()
+        next(b for b in self.at.button if b.label == "Remove employee (deactivate)").click().run()
+        self.assertEqual(self.repo.snapshot()["employees"][0]["active"], "false")
+
+        confirm = next(t for t in self.at.text_input if t.label == "Type E1 to confirm permanent deletion")
+        confirm.set_value("E1").run()
+        next(b for b in self.at.button if b.label == "Permanently delete employee and planner data").click().run()
+        self.assertFalse(self.at.exception)
+        state = self.repo.snapshot()
+        self.assertFalse(any(row["employee_id"] == "E1" for row in state["employees"]))
+        self.assertFalse(any(row["employee_id"] == "E1" for row in state["ranges"]))
+
 
 if __name__ == "__main__":
     unittest.main()

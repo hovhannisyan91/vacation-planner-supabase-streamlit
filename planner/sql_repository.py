@@ -19,8 +19,10 @@ from sqlalchemy import URL, create_engine, text
 from sqlalchemy.engine import Connection, Engine, URL as SQLAlchemyURL, make_url
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from planner.domain import ConflictError, KEYS, SCHEMAS, ValidationError, validate_state
+from planner.domain import ConflictError, KEYS, SCHEMAS, UNASSIGNED_TEAM, ValidationError, validate_state
 from planner.repository import csv_text
+
+DMC_DEPARTMENT_ID = "DMC_DEPARTMENT"
 
 
 def _env(*names: str, default: str | None = None) -> str | None:
@@ -143,9 +145,9 @@ class SqlAlchemyRepository:
         rows = conn.execute(text(f"""
             SELECT name, minimum_at_work, version, updated_at
             FROM {self._table('departments')}
-            WHERE active = true
+            WHERE active = true AND parent_department_id = :parent_id
             ORDER BY name
-        """)).mappings()
+        """), {"parent_id": DMC_DEPARTMENT_ID}).mappings()
         return [{
             "team": str(row["name"]),
             "minimum_at_work": str(row["minimum_at_work"]),
@@ -155,16 +157,18 @@ class SqlAlchemyRepository:
 
     def _employee_rows(self, conn: Connection) -> list[dict[str, str]]:
         rows = conn.execute(text(f"""
-            SELECT e.employee_id, e.full_name, d.name AS department,
+            SELECT e.employee_id, e.full_name,
+                   CASE WHEN d.parent_department_id = :team_parent_id
+                        THEN d.name ELSE :unassigned_team END AS team,
                    e.active, e.version, e.updated_at
             FROM {self._table('employees')} e
             JOIN {self._table('departments')} d ON d.id = e.department_id
-            ORDER BY d.name, e.full_name, e.employee_id
-        """)).mappings()
+            ORDER BY team, e.full_name, e.employee_id
+        """), {"team_parent_id": DMC_DEPARTMENT_ID, "unassigned_team": UNASSIGNED_TEAM}).mappings()
         return [{
             "employee_id": str(row["employee_id"]),
             "name": str(row["full_name"]),
-            "team": str(row["department"]),
+            "team": str(row["team"]),
             "active": str(bool(row["active"])).lower(),
             "version": str(row["version"]),
             "updated_at": _timestamp_value(row["updated_at"]),
@@ -232,9 +236,17 @@ class SqlAlchemyRepository:
         return conn.execute(text(f"""
             SELECT id, name, minimum_at_work, version, active
             FROM {self._table('departments')}
-            WHERE name = :name
+            WHERE name = :name AND parent_department_id = :parent_id
             FOR UPDATE
-        """), {"name": name}).mappings().first()
+        """), {"name": name, "parent_id": DMC_DEPARTMENT_ID}).mappings().first()
+
+    def _dmc_department(self, conn: Connection) -> Mapping[str, Any] | None:
+        return conn.execute(text(f"""
+            SELECT id, name, minimum_at_work, version, active
+            FROM {self._table('departments')}
+            WHERE id = :id AND active = true
+            FOR UPDATE
+        """), {"id": DMC_DEPARTMENT_ID}).mappings().first()
 
     def _current_employee(self, conn: Connection, employee_id: str) -> Mapping[str, Any] | None:
         return conn.execute(text(f"""
@@ -270,7 +282,7 @@ class SqlAlchemyRepository:
     def _save_department(self, conn: Connection, values: dict[str, Any], expected_version: str | None) -> dict[str, str]:
         name = str(values.get("team", "")).strip()
         if not name:
-            raise ValidationError("Department name is required.")
+            raise ValidationError("Team name is required.")
         try:
             minimum = int(str(values.get("minimum_at_work", "")).strip())
         except ValueError as exc:
@@ -289,10 +301,15 @@ class SqlAlchemyRepository:
                 WHERE id = :id AND version = :version
             """), {"minimum": minimum, "id": current["id"], "version": int(current["version"])})
         else:
+            parent = self._dmc_department(conn)
+            if not parent:
+                raise ValidationError("Run the DMC hierarchy migration before adding teams.")
             conn.execute(text(f"""
-                INSERT INTO {self._table('departments')} (id, name, minimum_at_work, active)
-                VALUES (:id, :name, :minimum, true)
-            """), {"id": uuid.uuid4().hex, "name": name, "minimum": minimum})
+                INSERT INTO {self._table('departments')}
+                    (id, name, minimum_at_work, parent_department_id, active)
+                VALUES (:id, :name, :minimum, :parent_id, true)
+            """), {"id": uuid.uuid4().hex, "name": name, "minimum": minimum,
+                  "parent_id": parent["id"]})
         saved = self._current_department(conn, name)
         return {
             "team": name,
@@ -304,15 +321,15 @@ class SqlAlchemyRepository:
     def _save_employee(self, conn: Connection, values: dict[str, Any], expected_version: str | None) -> dict[str, str]:
         employee_id = str(values.get("employee_id", "")).strip()
         name = str(values.get("name", "")).strip()
-        department = str(values.get("team", "")).strip()
+        team = str(values.get("team", "")).strip()
         active_text = str(values.get("active", "true")).strip().lower()
-        if not employee_id or not name or not department:
-            raise ValidationError("Employee ID, name, and department are required.")
+        if not employee_id or not name or not team:
+            raise ValidationError("Employee ID, name, and team are required.")
         if active_text not in ("true", "false"):
             raise ValidationError("Employee active must be true or false.")
-        department_row = self._current_department(conn, department)
+        department_row = self._dmc_department(conn) if team == UNASSIGNED_TEAM else self._current_department(conn, team)
         if not department_row or not department_row["active"]:
-            raise ValidationError("Choose an active department before saving the employee.")
+            raise ValidationError("Choose an active team before saving the employee.")
         current = self._current_employee(conn, employee_id)
         if current and expected_version != str(current["version"]):
             raise ConflictError("This employee changed in another session. Refresh and try again.")
@@ -346,7 +363,7 @@ class SqlAlchemyRepository:
         return {
             "employee_id": employee_id,
             "name": str(saved["full_name"]),
-            "team": department,
+            "team": team,
             "active": str(bool(saved["active"])).lower(),
             "version": str(saved["version"]),
             "updated_at": _timestamp_value(saved["updated_at"]),
@@ -496,6 +513,37 @@ class SqlAlchemyRepository:
                 """), {"day": date.fromisoformat(day), "version": int(expected_version)})
                 if result.rowcount != 1:
                     raise ConflictError("Holiday changed in another session. Refresh and try again.")
+        except (ValidationError, ConflictError):
+            raise
+        except Exception as exc:
+            self._raise_db(exc)
+            raise AssertionError("unreachable")
+
+    def delete_employee_permanently(self, employee_id: str, expected_version: str) -> None:
+        """Purge a deactivated employee and all employee-linked planner history."""
+        try:
+            with self.engine.begin() as conn:
+                employee = self._current_employee(conn, employee_id)
+                if not employee or str(employee["version"]) != expected_version:
+                    raise ConflictError("Employee changed in another session. Refresh and try again.")
+                if employee["active"]:
+                    raise ValidationError("Deactivate the employee before permanently deleting them.")
+
+                # Delete in foreign-key order. Removing requests also cascades their event history.
+                conn.execute(text(f"DELETE FROM {self._table('leave_requests')} WHERE employee_id = :id"),
+                             {"id": employee_id})
+                conn.execute(text(f"DELETE FROM {self._table('availability_windows')} WHERE employee_id = :id"),
+                             {"id": employee_id})
+                conn.execute(text(f"DELETE FROM {self._table('leave_balances')} WHERE employee_id = :id"),
+                             {"id": employee_id})
+                conn.execute(text(f"DELETE FROM {self._table('team_memberships')} WHERE employee_id = :id"),
+                             {"id": employee_id})
+                result = conn.execute(text(f"""
+                    DELETE FROM {self._table('employees')}
+                    WHERE employee_id = :id AND version = :version
+                """), {"id": employee_id, "version": int(employee["version"])})
+                if result.rowcount != 1:
+                    raise ConflictError("Employee changed in another session. Refresh and try again.")
         except (ValidationError, ConflictError):
             raise
         except Exception as exc:

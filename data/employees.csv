@@ -1,7 +1,7 @@
 employee_id,name,team,active,version,updated_at
-E001,Sample employee 01,DMC,true,1,2026-10-01T00:00:00+00:00
-E002,Sample employee 02,Data Analytics and Engineering,true,1,2026-10-01T00:00:00+00:00
-E003,Sample employee 03,Data Analytics and Engineering,true,1,2026-10-01T00:00:00+00:00
+E001,Sample employee 01,Unassigned (DMC Department),true,1,2026-10-01T00:00:00+00:00
+E002,Sample employee 02,Data Analytics,true,1,2026-10-01T00:00:00+00:00
+E003,Sample employee 03,Data Analytics,true,1,2026-10-01T00:00:00+00:00
 E004,Sample employee 04,Data Governance,true,1,2026-10-01T00:00:00+00:00
 E005,Sample employee 05,Data Governance,true,1,2026-10-01T00:00:00+00:00
 E006,Sample employee 06,ML,true,1,2026-10-01T00:00:00+00:00

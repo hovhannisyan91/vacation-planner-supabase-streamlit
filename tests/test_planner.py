@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
-from planner.domain import ConflictError, ValidationError, availability_message, merge_ranges, month_view
+from planner.domain import UNASSIGNED_TEAM, ConflictError, ValidationError, availability_message, merge_ranges, month_view
 from planner.repository import CsvRepository, parse_import
 
 
@@ -58,6 +58,30 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(view["people"][0]["approved_days"], 2)
         self.assertFalse(any(r["below_minimum"] for r in view["coverage"]))
         self.assertEqual(len(month_view(state, 2028, 2)["days"]), 29)
+
+    def test_parent_level_employee_is_retained_but_not_counted_as_a_team(self):
+        self.repo.save("employees", dict(employee_id="E3", name="Department employee",
+                                           team=UNASSIGNED_TEAM, active="true"))
+        view = month_view(self.repo.snapshot(), 2026, 10)
+        self.assertEqual(len(view["people"]), 3)
+        self.assertEqual({row["team"] for row in view["coverage"]}, {"Data"})
+
+    def test_permanent_delete_requires_deactivation_and_removes_linked_ranges(self):
+        self.repo.save("ranges", period("availability", kind="Available"))
+        employee = next(r for r in self.repo.snapshot()["employees"] if r["employee_id"] == "E1")
+        with self.assertRaises(ValidationError):
+            self.repo.delete_employee_permanently("E1", employee["version"])
+
+        inactive = self.repo.save("employees", {
+            "employee_id": "E1", "name": "E1", "team": "Data", "active": "false"
+        }, employee["version"])
+        with self.assertRaises(ConflictError):
+            self.repo.delete_employee_permanently("E1", employee["version"])
+        self.repo.delete_employee_permanently("E1", inactive["version"])
+        state = self.repo.snapshot()
+        self.assertNotIn("E1", {r["employee_id"] for r in state["employees"]})
+        self.assertFalse(any(r["employee_id"] == "E1" for r in state["ranges"]))
+        self.assertIn("E2", {r["employee_id"] for r in state["employees"]})
 
     def test_invalid_batch_has_no_partial_write(self):
         before = (Path(self.temp.name) / "ranges.csv").read_bytes()

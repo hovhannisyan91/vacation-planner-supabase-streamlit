@@ -12,7 +12,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from filelock import Timeout
 
-from planner.domain import KEYS, KINDS, SCHEMAS, ValidationError, availability_message, iso_date, merge_ranges, month_view, working_days
+from planner.domain import KEYS, KINDS, SCHEMAS, UNASSIGNED_TEAM, ValidationError, availability_message, iso_date, merge_ranges, month_view, working_days
 from planner.repository import CsvRepository, csv_text, parse_import
 from planner.sql_repository import SqlAlchemyRepository
 
@@ -197,22 +197,24 @@ elif page == "Date ranges":
 
 elif page == "Employees & teams":
     st.title("Employees & teams")
-    team_tab, people_tab = st.tabs(["Departments", "Employees"])
+    team_tab, people_tab = st.tabs(["DMC hierarchy", "Employees"])
     with team_tab:
+        st.markdown("**DMC**  ›  **DMC Department**")
+        st.caption("Teams are managed under the DMC Department.")
         team_names = [r["team"] for r in state["teams"]]
-        selected = st.selectbox("Department to update", ["Add a department"] + team_names)
+        selected = st.selectbox("Team to update", ["Add a team"] + team_names)
         current = edit_baseline("teams", next((r for r in state["teams"] if r["team"] == selected), None))
         with st.form(f"team_{selected}_{current['version'] if current else 'new'}"):
-            team_name = st.text_input("Department name", value=current["team"] if current else "", disabled=bool(current), max_chars=80)
+            team_name = st.text_input("Team name", value=current["team"] if current else "", disabled=bool(current), max_chars=80)
             minimum = st.number_input("Minimum employees at work", min_value=0, value=int(current["minimum_at_work"]) if current else 1, step=1)
-            submitted = st.form_submit_button("Save department", type="primary")
+            submitted = st.form_submit_button("Save team", type="primary")
         if submitted:
-            save_action(lambda: repo.save("teams", dict(team=team_name, minimum_at_work=str(minimum)), current["version"] if current else None), "Department saved.")
-        st.caption("The initial departments are DMC, Data Analytics and Engineering, Data Governance, and ML. You can add another department here.")
-        display_rows(state["teams"], ["department", "minimum_at_work"])
+            save_action(lambda: repo.save("teams", dict(team=team_name, minimum_at_work=str(minimum)), current["version"] if current else None), "Team saved.")
+        st.caption("DMC Department starts with ML, Data Analytics, and Data Governance. You can add another team under it.")
+        display_rows(state["teams"], ["team", "minimum_at_work"])
     with people_tab:
         if not team_names:
-            st.info("Create a department first.")
+            st.info("Add a team under DMC Department first.")
         else:
             selected_employee = st.selectbox("Employee to update", ["Add an employee"] + list(names), format_func=lambda value: names.get(value, value))
             current = edit_baseline("employees", next((r for r in state["employees"] if r["employee_id"] == selected_employee), None))
@@ -220,7 +222,9 @@ elif page == "Employees & teams":
                 c1, c2 = st.columns(2)
                 employee_id = c1.text_input("Employee ID", value=current["employee_id"] if current else "", disabled=bool(current), max_chars=40)
                 name = c2.text_input("Employee name", value=current["name"] if current else "", max_chars=100)
-                team_name = st.selectbox("Employee department", team_names, index=team_names.index(current["team"]) if current else 0)
+                team_choices = ([UNASSIGNED_TEAM] + team_names) if current else team_names
+                team_index = team_choices.index(current["team"]) if current else 0
+                team_name = st.selectbox("Employee team", team_choices, index=team_index)
                 active = st.checkbox("Active employee", value=current["active"] == "true" if current else True)
                 submitted = st.form_submit_button("Add employee" if current is None else "Save employee", type="primary")
             if submitted:
@@ -235,6 +239,22 @@ elif page == "Employees & teams":
                         values = {"employee_id": current["employee_id"], "name": current["name"], "team": current["team"], "active": "true"}
                         save_action(lambda: repo.save("employees", values, current["version"]), "Employee reactivated.")
                 st.caption("Remove deactivates the employee instead of deleting leave history. Reactivate them from this same control.")
+                if current["active"] == "false":
+                    st.divider()
+                    st.warning("Permanent deletion also erases this employee's availability windows, leave requests, and team membership history. This cannot be undone.")
+                    confirmation = st.text_input(
+                        f"Type {current['employee_id']} to confirm permanent deletion",
+                        key=f"purge_employee_confirm_{current['employee_id']}",
+                    )
+                    if st.button(
+                        "Permanently delete employee and planner data",
+                        key=f"purge_employee_{current['employee_id']}",
+                        disabled=confirmation != current["employee_id"],
+                    ):
+                        save_action(
+                            lambda: repo.delete_employee_permanently(current["employee_id"], current["version"]),
+                            "Employee and all linked planner data permanently deleted.",
+                        )
             display_rows(state["employees"], ["employee_id", "name", "team", "active"])
 
 elif page == "Holidays":

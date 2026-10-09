@@ -104,6 +104,40 @@ class CsvRepository:
                 raise ConflictError("Holiday changed in another session. Refresh and try again.")
             self._write("holidays", [r for r in state["holidays"] if r["date"] != day])
 
+    def delete_employee_permanently(self, employee_id: str, expected_version: str) -> None:
+        """Permanently remove a deactivated employee and all their date ranges."""
+        with self.lock:
+            state = self._read()
+            employee = next((r for r in state["employees"] if r["employee_id"] == employee_id), None)
+            if not employee or employee["version"] != expected_version:
+                raise ConflictError("Employee changed in another session. Refresh and try again.")
+            if employee["active"] == "true":
+                raise ValidationError("Deactivate the employee before permanently deleting them.")
+
+            changed = {
+                "ranges": [r for r in state["ranges"] if r["employee_id"] != employee_id],
+                "employees": [r for r in state["employees"] if r["employee_id"] != employee_id],
+            }
+            originals = {table: (self.directory / f"{table}.csv").read_bytes() for table in changed}
+            replaced = []
+            try:
+                for table, rows in changed.items():
+                    self._write(table, rows)
+                    replaced.append(table)
+            except Exception:
+                for table in reversed(replaced):
+                    fd, name = tempfile.mkstemp(prefix=f".{table}-restore-", suffix=".tmp", dir=self.directory)
+                    try:
+                        with os.fdopen(fd, "wb") as handle:
+                            handle.write(originals[table])
+                            handle.flush()
+                            os.fsync(handle.fileno())
+                        os.replace(name, self.directory / f"{table}.csv")
+                    finally:
+                        if os.path.exists(name):
+                            os.unlink(name)
+                raise
+
     def import_ranges(self, incoming: list[dict]) -> tuple[int, int]:
         """Append a whole batch or nothing. Skip exact repeats; reject ID conflicts."""
         with self.lock:

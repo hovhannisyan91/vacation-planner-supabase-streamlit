@@ -9,7 +9,7 @@ def main() -> None:
     details = repository.ping()
     state = repository.snapshot()
     print(f"Connected to {details['database']} as {details['user']}.")
-    print(f"Departments: {len(state['teams'])}; employees: {len(state['employees'])}; ranges: {len(state['ranges'])}; holidays: {len(state['holidays'])}.")
+    print(f"Teams: {len(state['teams'])}; employees: {len(state['employees'])}; ranges: {len(state['ranges'])}; holidays: {len(state['holidays'])}.")
     print("Supabase vacation schema is readable.")
 
 

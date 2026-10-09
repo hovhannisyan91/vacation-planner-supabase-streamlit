@@ -1,11 +1,14 @@
 # Vacation planner: Streamlit + Supabase
 
-This is a manager-operated vacation planner for four seeded departments:
+This is a manager-operated vacation planner for the DMC organization:
 
-- `DMC`
-- `Data Analytics and Engineering`
-- `Data Governance`
-- `ML`
+```text
+DMC
+└── DMC Department
+    ├── ML
+    ├── Data Analytics
+    └── Data Governance
+```
 
 The main repository is Supabase Postgres through SQLAlchemy. The original CSV
 repository remains available as a local fallback for demos and offline work.
@@ -31,10 +34,11 @@ defines dependencies and `uv.lock` pins the resolved environment.
 ## 2. Create the Supabase tables
 
 1. Create or open the Supabase project.
-2. In Supabase **SQL Editor**, run
-   `supabase/migrations/20261009120000_vacation_schema.sql`.
-3. The migration creates the normalized private `vacation` schema, seeds the
-   four departments above, seeds annual/unpaid/training leave types, adds
+2. In Supabase **SQL Editor**, run the files in timestamp order:
+   `supabase/migrations/20261009120000_vacation_schema.sql`, then
+   `supabase/migrations/20261009163000_dmc_department_teams.sql`.
+3. The migrations create the private `vacation` schema and DMC hierarchy,
+   seed annual/unpaid/training leave types, add
    availability windows, leave requests, balances, memberships, holidays,
    request events, audit-friendly versions, RLS policies, and coverage views.
 
@@ -84,16 +88,18 @@ the **Session pooler** connection details from Supabase **Connect** instead
 
 ### Departments and employees
 
-Open **Employees & teams** (the page retains the old URL label for continuity)
-and choose **Departments** or **Employees**.
+Open **Employees & teams** and choose **DMC hierarchy** or **Employees**.
 
-- Departments start with the four seeded names and can be added later.
-- Add an employee with an ID, name, and department.
+- The organization is `DMC` → `DMC Department` → `ML`, `Data Analytics`, and
+  `Data Governance`. Additional teams can be added under DMC Department.
+- Add an employee with an ID, name, and team. Existing DMC-level employees
+  remain in the roster as `Unassigned (DMC Department)` until assigned to a team.
 - **Remove employee (deactivate)** takes the employee out of the active roster
   without deleting leave history or memberships.
 - **Reactivate employee** restores them to the active roster.
-- The database prevents deleting an employee that has leave or membership
-  history. This is intentional: deactivation is the safe removal operation.
+- **Permanently delete employee and planner data** appears after deactivation
+  and requires typing the employee ID. It erases that employee's availability,
+  leave requests and events, balances, and membership history.
 
 ### Available dates and leave
 
@@ -120,8 +126,9 @@ range IDs. The download action provides a consistent domain-level CSV backup.
 Set `DATA_BACKEND=csv` (or omit it when no database variables are present) and
 run the app with `uv run streamlit run app.py`. The fallback uses `data/` and
 retains atomic writes, file locking, backups, stale-edit protection, merging,
-and the same employee deactivation behavior. The sample CSV roster uses the
-four seeded department names.
+and employee deactivation/permanent deletion behavior. The sample CSV roster
+uses the same DMC hierarchy and keeps the parent-level sample employee
+unassigned until a team is chosen.
 
 ## Docker Compose
 
@@ -142,9 +149,9 @@ installs dependencies with pip. Keep `.env` outside the image and host.
 | Object | Purpose |
 |---|---|
 | `profiles` | Optional Supabase Auth profile and application role |
-| `departments` | Department names and minimum staffing |
-| `employees` | Current employee identity, department, active/termination state |
-| `team_memberships` | Historical department assignments |
+| `departments` | DMC, DMC Department, and teams, linked through `parent_department_id` |
+| `employees` | Current employee identity, team/department assignment, active state |
+| `team_memberships` | Historical department or team assignments |
 | `leave_types` | Annual, unpaid, and training leave categories |
 | `leave_balances` | Per-employee yearly entitlement and adjustments |
 | `availability_windows` | Dates during which vacation may be taken |

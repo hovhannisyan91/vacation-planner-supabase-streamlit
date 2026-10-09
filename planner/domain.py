@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from typing import Iterable
 
 KINDS = ("Available", "Planned", "Approved", "Cancelled")
+UNASSIGNED_TEAM = "Unassigned (DMC Department)"
 SCHEMAS = {
     "teams": ("team", "minimum_at_work", "version", "updated_at"),
     "employees": ("employee_id", "name", "team", "active", "version", "updated_at"),
@@ -52,7 +53,7 @@ def validate_state(state: dict[str, list[dict]]) -> None:
         if not row["minimum_at_work"].isdigit():
             raise ValidationError("Minimum at work must be a non-negative whole number.")
     for row in state["employees"]:
-        if not row["name"] or row["team"] not in teams:
+        if not row["name"] or (row["team"] not in teams and row["team"] != UNASSIGNED_TEAM):
             raise ValidationError(f"Employee {row['employee_id']} needs a name and an existing team.")
         if row["active"] not in ("true", "false"):
             raise ValidationError("Employee active must be true or false.")
