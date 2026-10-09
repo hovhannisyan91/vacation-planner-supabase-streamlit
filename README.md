@@ -165,4 +165,4 @@ installs dependencies with pip. Keep `.env` outside the image and host.
 | `supabase/migrations/` | Database schema, seeds, RLS, triggers, and views |
 | `scripts/test_connection.py` | Safe connection/schema smoke test |
 | `tests/` | Domain, CSV storage, and Streamlit form tests |
-```
+

@@ -1,0 +1,11 @@
+services:
+  vacation-planner:
+    build: .
+    env_file:
+      - .env
+    environment:
+      DATA_BACKEND: ${DATA_BACKEND:-supabase}
+      DB_SCHEMA: ${DB_SCHEMA:-vacation}
+    ports:
+      - "127.0.0.1:8501:8501"
+    restart: unless-stopped

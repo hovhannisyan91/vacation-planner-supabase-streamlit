@@ -1,0 +1,21 @@
+[project]
+name = "vacation-planner"
+version = "0.2.0"
+description = "Streamlit vacation planner with a Supabase/Postgres backend and CSV fallback"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "filelock==3.32.7",
+    "pandas==2.3.3",
+    "psycopg2-binary==2.9.11",
+    "python-dotenv==1.1.1",
+    "sqlalchemy==2.0.44",
+    "streamlit==1.55.0",
+]
+
+[dependency-groups]
+dev = []
+
+[tool.uv]
+package = false
+

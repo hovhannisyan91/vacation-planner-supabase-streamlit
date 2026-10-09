@@ -1,0 +1,21 @@
+range_id,employee_id,kind,start_date,end_date,note,version,updated_at
+R001,E001,Approved,2026-10-14,2026-10-16,Overlapping approved range,1,2026-10-01T00:00:00+00:00
+R002,E002,Available,2026-10-01,2026-10-31,Available during October,1,2026-10-01T00:00:00+00:00
+R003,E001,Available,2026-10-01,2026-10-16,First availability window,1,2026-10-01T00:00:00+00:00
+R004,E003,Available,2026-10-01,2026-10-09,First availability window,1,2026-10-01T00:00:00+00:00
+R005,E001,Approved,2026-10-12,2026-10-14,Overlapping approved range,1,2026-10-01T00:00:00+00:00
+R006,E004,Available,2026-10-01,2026-10-31,Available during October,1,2026-10-01T00:00:00+00:00
+R007,E002,Planned,2026-10-15,2026-10-20,Planned vacation,1,2026-10-01T00:00:00+00:00
+R008,E001,Available,2026-10-15,2026-10-31,Overlapping availability window,1,2026-10-01T00:00:00+00:00
+R009,E003,Available,2026-10-19,2026-10-30,Second availability window,1,2026-10-01T00:00:00+00:00
+R010,E005,Available,2026-10-01,2026-10-31,Available during October,1,2026-10-01T00:00:00+00:00
+R011,E001,Approved,2026-10-17,2026-10-19,Consecutive approved range,1,2026-10-01T00:00:00+00:00
+R012,E003,Planned,2026-10-12,2026-10-13,Outside available dates example,1,2026-10-01T00:00:00+00:00
+R013,E006,Available,2026-10-01,2026-10-31,Available during October,1,2026-10-01T00:00:00+00:00
+R014,E004,Approved,2026-10-05,2026-10-09,Approved vacation,1,2026-10-01T00:00:00+00:00
+R015,E003,Approved,2026-10-26,2026-10-28,Approved vacation,1,2026-10-01T00:00:00+00:00
+R016,E005,Planned,2026-10-08,2026-10-12,Team coverage warning example,1,2026-10-01T00:00:00+00:00
+R017,E002,Planned,2026-10-15,2026-10-20,Planned vacation,1,2026-10-01T00:00:00+00:00
+R018,E006,Cancelled,2026-10-20,2026-10-23,Excluded from calendar,1,2026-10-01T00:00:00+00:00
+R019,E006,Planned,2026-10-21,2026-10-23,Planned vacation,1,2026-10-01T00:00:00+00:00
+R020,E002,Approved,2026-10-16,2026-10-16,Approved takes calendar precedence,1,2026-10-01T00:00:00+00:00
